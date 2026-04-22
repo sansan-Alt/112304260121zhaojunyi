@@ -10,47 +10,44 @@ import joblib
 class Word2VecModel:
     def __init__(self, vector_size=300, window=5, min_count=10, workers=4, 
                  sg=1, epochs=10, classifier='lr'):
-        self.vector_size = vector_size
-        self.window = window
-        self.min_count = min_count
-        self.workers = workers
-        self.sg = sg
-        self.epochs = epochs
-        self.word2vec_model = None
-        
-        if classifier == 'lr':
-            self.classifier = LogisticRegression(C=1.0, max_iter=500, random_state=42)
-        elif classifier == 'rf':
-            self.classifier = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
+        self.w2v_params = {
+            'vector_size': vector_size,
+            'window': window,
+            'min_count': min_count,
+            'workers': workers,
+            'sg': sg,
+            'epochs': epochs
+        }
+        self.w2v_model = None
+        self.classifier = self._init_classifier(classifier)
+    
+    def _init_classifier(self, clf_type):
+        if clf_type == 'lr':
+            return LogisticRegression(C=1.0, max_iter=500, random_state=42)
+        elif clf_type == 'rf':
+            return RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
+        return LogisticRegression(C=1.0, max_iter=500, random_state=42)
     
     def train_word2vec(self, sentences):
-        self.word2vec_model = Word2Vec(
-            sentences=sentences,
-            vector_size=self.vector_size,
-            window=self.window,
-            min_count=self.min_count,
-            workers=self.workers,
-            sg=self.sg,
-            epochs=self.epochs
-        )
-        return self.word2vec_model
+        self.w2v_model = Word2Vec(sentences=sentences, **self.w2v_params)
+        return self.w2v_model
     
     def get_sentence_vector(self, words):
-        feature_vector = np.zeros((self.vector_size,), dtype="float32")
-        nwords = 0.
-        index2word_set = set(self.word2vec_model.wv.index_to_key)
+        embedding_dim = self.w2v_params['vector_size']
+        feature_vector = np.zeros(embedding_dim, dtype=np.float32)
+        valid_words = 0
         
+        vocab = set(self.w2v_model.wv.index_to_key)
         for word in words:
-            if word in index2word_set:
-                nwords = nwords + 1.
-                feature_vector = np.add(feature_vector, self.word2vec_model.wv[word])
+            if word in vocab:
+                feature_vector += self.w2v_model.wv[word]
+                valid_words += 1
         
-        if nwords > 0:
-            feature_vector = np.divide(feature_vector, nwords)
-        return feature_vector
+        return feature_vector / valid_words if valid_words > 0 else feature_vector
     
     def transform(self, tokenized_texts):
-        features = np.zeros((len(tokenized_texts), self.vector_size), dtype="float32")
+        embedding_dim = self.w2v_params['vector_size']
+        features = np.zeros((len(tokenized_texts), embedding_dim), dtype=np.float32)
         for i, text in enumerate(tokenized_texts):
             features[i] = self.get_sentence_vector(text)
         return features
@@ -76,10 +73,10 @@ class Word2VecModel:
         return roc_auc_score(y, y_pred_proba)
     
     def save(self, word2vec_path='word2vec.model', classifier_path='word2vec_classifier.pkl'):
-        if self.word2vec_model:
-            self.word2vec_model.save(word2vec_path)
+        if self.w2v_model:
+            self.w2v_model.save(word2vec_path)
         joblib.dump(self.classifier, classifier_path)
     
     def load(self, word2vec_path='word2vec.model', classifier_path='word2vec_classifier.pkl'):
-        self.word2vec_model = Word2Vec.load(word2vec_path)
+        self.w2v_model = Word2Vec.load(word2vec_path)
         self.classifier = joblib.load(classifier_path)

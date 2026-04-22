@@ -25,22 +25,27 @@ ENGLISH_STOPWORDS = {
 class TextPreprocessor:
     def __init__(self, method='stem'):
         self.stop_words = ENGLISH_STOPWORDS
-        self.method = method
-        if method == 'stem':
-            self.stemmer = PorterStemmer()
+        self.stemmer = PorterStemmer() if method == 'stem' else None
+        self.use_stemming = (method == 'stem')
+    
+    def _remove_html(self, text):
+        return BeautifulSoup(text, 'html.parser').get_text()
+    
+    def _normalize(self, text):
+        text = re.sub(r'[^a-zA-Z]', ' ', text)
+        return text.lower()
     
     def clean_text(self, text):
-        text = BeautifulSoup(text, 'html.parser').get_text()
-        text = re.sub(r'[^a-zA-Z]', ' ', text)
-        text = text.lower()
+        text = self._remove_html(text)
+        text = self._normalize(text)
         words = text.split()
-        words = [w for w in words if not w in self.stop_words]
+        words = [w for w in words if w not in self.stop_words]
         
-        if self.method == 'stem':
-            words = [self.stemmer.stem(w) for w in words]
+        if self.use_stemming and self.stemmer:
+            words = [self.stemmer.stem(word) for word in words]
         
         return ' '.join(words)
     
     def tokenize(self, text):
-        text = self.clean_text(text)
-        return text.split()
+        cleaned = self.clean_text(text)
+        return cleaned.split()
